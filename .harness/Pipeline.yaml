@@ -1,0 +1,83 @@
+pipeline:
+  name: j2cl
+  identifier: j2cl
+  projectIdentifier: NgLabs
+  orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: account.gitforronak
+        repoName: google/j2cl
+        build: <+input>
+  stages:
+    - stage:
+        name: build-ubantu
+        identifier: buildubantu
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Action
+                  name: Setup Java
+                  identifier: Setup_Java
+                  spec:
+                    uses: actions/setup-java@v3
+                    with:
+                      java-version: "11"
+                      distribution: zulu
+                      java-package: jdk
+              - step:
+                  type: RestoreCacheGCS
+                  name: "restore repo cache "
+                  identifier: restore_repo_cache
+                  spec:
+                    connectorRef: ronakgcpbucket
+                    bucket: migration-artifact-comman
+                    key: bazel-v5-cache
+                    archiveFormat: Tar
+                  when:
+                    stageStatus: Success
+                    condition: "false"
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Ignore
+              - step:
+                  type: Run
+                  name: Configure bazel
+                  identifier: Configure_bazel
+                  spec:
+                    shell: Sh
+                    command: |2-
+                                echo "build --repository_cache=~/bazel-repository-cache" >> ~/.bazelrc
+                                echo "build --disk_cache=~/bazel-action-cache" >> ~/.bazelrc
+                                echo "build --verbose_failures" >> ~/.bazelrc
+                                ./build_test.sh CI
+              - step:
+                  type: SaveCacheGCS
+                  name: save bazel repo cache
+                  identifier: save_bazel_repo_cache
+                  spec:
+                    connectorRef: ronakgcpbucket
+                    bucket: migration-artifact-comman
+                    key: bazel-v5-cache
+                    sourcePaths:
+                      - /home/ubuntu/.cache/bazel/
+                    archiveFormat: Tar
+                  when:
+                    stageStatus: Success
+                    condition: "false"
+                  failureStrategies: []
+          sharedPaths:
+            - /home/ubuntu/
